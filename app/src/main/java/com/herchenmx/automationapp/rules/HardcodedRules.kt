@@ -13,22 +13,22 @@ import com.herchenmx.automationapp.triggers.BatteryLevelTrigger
 import com.herchenmx.automationapp.triggers.BluetoothAudioTrigger
 import com.herchenmx.automationapp.triggers.ForegroundAppTrigger
 import com.herchenmx.automationapp.triggers.MediaSessionActiveTrigger
+import com.herchenmx.automationapp.util.AppPreferences
 
 object HardcodedRules {
 
-    // Package to silence when it enters the foreground — change to your target app.
-    private const val TARGET_APP_PACKAGE = "com.example.targetapp"
-    private const val BATTERY_THRESHOLD_PERCENT = 50
+    fun buildRules(context: Context, stateManager: StateManager): List<Rule> {
+        val targetApp = AppPreferences.getTargetApp(context)
+        val batteryThreshold = AppPreferences.getBatteryThreshold(context)
+        return listOf(
 
-    fun buildRules(context: Context, stateManager: StateManager): List<Rule> = listOf(
-
-        // Rule 1: When TARGET_APP_PACKAGE comes to the foreground, mute speaker volume.
-        // Volume is restored to whatever it was when the app leaves the foreground.
+        // Rule 1: When configured app comes to the foreground, mute speaker volume.
+        // Volume is restored when the app leaves the foreground.
         Rule(
             id = "foreground_app_volume",
             name = "Mute app audio on foreground",
             triggers = listOf(
-                ForegroundAppTrigger(id = "fg_app_trigger", targetPackage = TARGET_APP_PACKAGE)
+                ForegroundAppTrigger(id = "fg_app_trigger", targetPackage = targetApp)
             ),
             actions = listOf(
                 SetVolumeAction(
@@ -45,12 +45,12 @@ object HardcodedRules {
         // State is restored when battery rises above threshold.
         Rule(
             id = "battery_saver",
-            name = "Battery saver at $BATTERY_THRESHOLD_PERCENT%",
+            name = "Battery saver at $batteryThreshold%",
             triggers = listOf(
                 BatteryLevelTrigger(
                     id = "battery_trigger",
                     context = context,
-                    thresholdPercent = BATTERY_THRESHOLD_PERCENT,
+                    thresholdPercent = batteryThreshold,
                 )
             ),
             actions = listOf(
@@ -89,5 +89,6 @@ object HardcodedRules {
                 )
             ),
         ),
-    )
+        )
+    }
 }

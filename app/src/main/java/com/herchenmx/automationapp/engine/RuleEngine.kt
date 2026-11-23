@@ -30,7 +30,11 @@ class RuleEngine(
         rules.filter { it.isEnabled }.forEach { rule ->
             Timber.d("RuleEngine: starting rule '${rule.name}'")
             rule.triggers.forEach { trigger ->
-                trigger.start { isActive -> onTriggerChanged(rule, trigger, isActive) }
+                try {
+                    trigger.start { isActive -> onTriggerChanged(rule, trigger, isActive) }
+                } catch (e: Exception) {
+                    Timber.e(e, "RuleEngine: failed to start trigger '${trigger.id}' for rule '${rule.name}'")
+                }
             }
         }
     }

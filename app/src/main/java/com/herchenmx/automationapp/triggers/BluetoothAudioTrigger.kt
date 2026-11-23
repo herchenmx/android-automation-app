@@ -40,8 +40,15 @@ class BluetoothAudioTrigger(
     override fun start(onStateChange: (Boolean) -> Unit) {
         callback = onStateChange
         context.registerReceiver(receiver, IntentFilter(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED))
-        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        val initiallyConnected = adapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_CONNECTED
+        // getProfileConnectionState requires BLUETOOTH_CONNECT on API 31+; guard with try-catch
+        // since the permission is declared in the manifest but may not be granted at runtime.
+        val initiallyConnected = try {
+            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+            adapter?.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothProfile.STATE_CONNECTED
+        } catch (e: SecurityException) {
+            Timber.w("BluetoothAudioTrigger[$id]: BLUETOOTH_CONNECT not granted, assuming disconnected")
+            false
+        }
         currentlyActive = initiallyConnected
         Timber.d("BluetoothAudioTrigger[$id]: started, initial connected=$initiallyConnected")
         if (initiallyConnected) onStateChange(true)

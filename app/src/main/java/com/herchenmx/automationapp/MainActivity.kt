@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.herchenmx.automationapp.ui.PermissionScreen
 import com.herchenmx.automationapp.ui.RuleListScreen
 import com.herchenmx.automationapp.ui.theme.AutomationAppTheme
@@ -33,7 +34,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AppNavigation() {
-    var allPermissionsGranted by remember { mutableStateOf(false) }
+    // rememberSaveable survives Activity recreation (config changes, brief backgrounding).
+    var allPermissionsGranted by rememberSaveable { mutableStateOf(false) }
     if (!allPermissionsGranted) {
         PermissionScreen(onAllGranted = { allPermissionsGranted = true })
     } else {
