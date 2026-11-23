@@ -20,75 +20,78 @@ object HardcodedRules {
     fun buildRules(context: Context, stateManager: StateManager): List<Rule> {
         val targetApp = AppPreferences.getTargetApp(context)
         val batteryThreshold = AppPreferences.getBatteryThreshold(context)
-        return listOf(
+        val btAddress = AppPreferences.getBluetoothTargetAddress(context)
 
-        // Rule 1: When configured app comes to the foreground, mute speaker volume.
-        // Volume is restored when the app leaves the foreground.
-        Rule(
-            id = "foreground_app_volume",
-            name = "Mute app audio on foreground",
-            triggers = listOf(
-                ForegroundAppTrigger(id = "fg_app_trigger", targetPackage = targetApp)
-            ),
-            actions = listOf(
-                SetVolumeAction(
-                    id = "mute_music",
-                    context = context,
-                    stateManager = stateManager,
-                    streamType = AudioManager.STREAM_MUSIC,
-                    targetVolume = 0,
-                )
-            ),
-        ),
-
-        // Rule 2: When battery drops below threshold, disable auto-sync and dim brightness.
-        // State is restored when battery rises above threshold.
-        Rule(
-            id = "battery_saver",
-            name = "Battery saver at $batteryThreshold%",
-            triggers = listOf(
-                BatteryLevelTrigger(
-                    id = "battery_trigger",
-                    context = context,
-                    thresholdPercent = batteryThreshold,
-                )
-            ),
-            actions = listOf(
-                SystemToggleAction(
+        val batteryActions = buildList {
+            if (AppPreferences.getBatterySaverAutoSync(context)) {
+                add(SystemToggleAction(
                     id = "disable_sync",
                     context = context,
                     stateManager = stateManager,
                     feature = SystemFeature.AUTO_SYNC,
                     enabledWhenActive = false,
-                ),
-                SystemToggleAction(
+                ))
+            }
+            if (AppPreferences.getBatterySaverBrightness(context)) {
+                add(SystemToggleAction(
                     id = "manual_brightness",
                     context = context,
                     stateManager = stateManager,
                     feature = SystemFeature.SCREEN_BRIGHTNESS,
                     enabledWhenActive = false,
+                ))
+            }
+        }
+
+        return listOf(
+            Rule(
+                id = "foreground_app_volume",
+                name = "Mute app audio on foreground",
+                triggers = listOf(
+                    ForegroundAppTrigger(id = "fg_app_trigger", targetPackage = targetApp)
+                ),
+                actions = listOf(
+                    SetVolumeAction(
+                        id = "mute_music",
+                        context = context,
+                        stateManager = stateManager,
+                        streamType = AudioManager.STREAM_MUSIC,
+                        targetVolume = 0,
+                    )
                 ),
             ),
-        ),
-
-        // Rule 3: When YT Music is playing AND a Bluetooth audio device is connected,
-        // enable DND (priority only). Both triggers must be active simultaneously.
-        Rule(
-            id = "yt_music_bt_dnd",
-            name = "DND while YT Music on Bluetooth",
-            triggers = listOf(
-                MediaSessionActiveTrigger(id = "yt_music_trigger"),
-                BluetoothAudioTrigger(id = "bt_audio_trigger", context = context),
+            Rule(
+                id = "battery_saver",
+                name = "Battery saver at $batteryThreshold%",
+                triggers = listOf(
+                    BatteryLevelTrigger(
+                        id = "battery_trigger",
+                        context = context,
+                        thresholdPercent = batteryThreshold,
+                    )
+                ),
+                actions = batteryActions,
             ),
-            actions = listOf(
-                DndModeAction(
-                    id = "enable_dnd",
-                    context = context,
-                    stateManager = stateManager,
-                    dndMode = NotificationManager.INTERRUPTION_FILTER_PRIORITY,
-                )
+            Rule(
+                id = "yt_music_bt_dnd",
+                name = "DND while YT Music on Bluetooth",
+                triggers = listOf(
+                    MediaSessionActiveTrigger(id = "yt_music_trigger"),
+                    BluetoothAudioTrigger(
+                        id = "bt_audio_trigger",
+                        context = context,
+                        targetDeviceAddress = btAddress,
+                    ),
+                ),
+                actions = listOf(
+                    DndModeAction(
+                        id = "enable_dnd",
+                        context = context,
+                        stateManager = stateManager,
+                        dndMode = NotificationManager.INTERRUPTION_FILTER_PRIORITY,
+                    )
+                ),
             ),
-        ),
         )
     }
 }

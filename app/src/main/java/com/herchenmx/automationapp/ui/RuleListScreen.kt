@@ -1,7 +1,14 @@
 package com.herchenmx.automationapp.ui
 
+import android.Manifest
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.herchenmx.automationapp.service.AutomationForegroundService
 import com.herchenmx.automationapp.util.AppPreferences
 import kotlinx.coroutines.Dispatchers
@@ -26,19 +34,32 @@ import kotlin.math.roundToInt
 @Composable
 fun RuleListScreen() {
     val context = LocalContext.current
+
     var serviceRunning by remember { mutableStateOf(false) }
 
+    // Rule 1
     var rule1Enabled by remember { mutableStateOf(true) }
     var rule1Expanded by remember { mutableStateOf(false) }
     var targetApp by remember { mutableStateOf(AppPreferences.getTargetApp(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
 
+    // Rule 2
     var rule2Enabled by remember { mutableStateOf(true) }
     var rule2Expanded by remember { mutableStateOf(false) }
     var batteryThreshold by remember { mutableFloatStateOf(AppPreferences.getBatteryThreshold(context).toFloat()) }
+    var batterySaverAutoSync by remember { mutableStateOf(AppPreferences.getBatterySaverAutoSync(context)) }
+    var batterySaverBrightness by remember { mutableStateOf(AppPreferences.getBatterySaverBrightness(context)) }
 
+    // Rule 3
     var rule3Enabled by remember { mutableStateOf(true) }
     var rule3Expanded by remember { mutableStateOf(false) }
+    var btTargetAddress by remember { mutableStateOf(AppPreferences.getBluetoothTargetAddress(context)) }
+    var btTargetName by remember { mutableStateOf(AppPreferences.getBluetoothTargetName(context)) }
+    var showBtPicker by remember { mutableStateOf(false) }
+
+    val btPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) showBtPicker = true
+    }
 
     if (showAppPicker) {
         AppPickerDialog(
@@ -46,6 +67,18 @@ fun RuleListScreen() {
             onSelect = { pkg ->
                 targetApp = pkg
                 AppPreferences.setTargetApp(context, pkg)
+            },
+        )
+    }
+
+    if (showBtPicker) {
+        BluetoothDevicePickerDialog(
+            onDismiss = { showBtPicker = false },
+            onSelect = { address, name ->
+                btTargetAddress = address
+                btTargetName = name
+                AppPreferences.setBluetoothTargetAddress(context, address)
+                AppPreferences.setBluetoothTargetName(context, name)
             },
         )
     }
@@ -86,6 +119,7 @@ fun RuleListScreen() {
                 Spacer(Modifier.height(8.dp))
             }
 
+            // Rule 1 — Foreground app mute
             item {
                 RuleCard(
                     name = "Mute on Foreground App",
@@ -95,11 +129,7 @@ fun RuleListScreen() {
                     onToggle = { rule1Enabled = it },
                     onExpandToggle = { rule1Expanded = !rule1Expanded },
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 12.dp),
-                    ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
                         Text("Target app package", style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
@@ -112,9 +142,7 @@ fun RuleListScreen() {
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             trailingIcon = {
-                                TextButton(onClick = { showAppPicker = true }) {
-                                    Text("Browse")
-                                }
+                                TextButton(onClick = { showAppPicker = true }) { Text("Browse") }
                             },
                         )
                         if (targetApp.isBlank()) {
@@ -129,22 +157,19 @@ fun RuleListScreen() {
                 }
             }
 
+            // Rule 2 — Battery saver
             item {
                 RuleCard(
                     name = "Battery Saver",
-                    description = "Disables auto-sync and dims brightness below threshold.",
+                    description = "Applies actions when battery drops below threshold.",
                     isEnabled = rule2Enabled,
                     isExpanded = rule2Expanded,
                     onToggle = { rule2Enabled = it },
                     onExpandToggle = { rule2Expanded = !rule2Expanded },
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 12.dp),
-                    ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
                         Text(
-                            "Battery threshold: ${batteryThreshold.roundToInt()}%",
+                            "Trigger below: ${batteryThreshold.roundToInt()}%",
                             style = MaterialTheme.typography.labelMedium,
                         )
                         Slider(
@@ -157,15 +182,38 @@ fun RuleListScreen() {
                             steps = 14,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Text(
-                            "Rule activates when battery drops below this level.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Spacer(Modifier.height(8.dp))
+                        Text("Actions when triggered:", style = MaterialTheme.typography.labelMedium)
+                        Spacer(Modifier.height(4.dp))
+                        ActionCheckbox(
+                            label = "Disable auto-sync",
+                            checked = batterySaverAutoSync,
+                            onCheckedChange = {
+                                batterySaverAutoSync = it
+                                AppPreferences.setBatterySaverAutoSync(context, it)
+                            },
                         )
+                        ActionCheckbox(
+                            label = "Set screen brightness to manual",
+                            checked = batterySaverBrightness,
+                            onCheckedChange = {
+                                batterySaverBrightness = it
+                                AppPreferences.setBatterySaverBrightness(context, it)
+                            },
+                        )
+                        if (!batterySaverAutoSync && !batterySaverBrightness) {
+                            Text(
+                                "No actions selected — rule will trigger but do nothing.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                     }
                 }
             }
 
+            // Rule 3 — YT Music + Bluetooth DND
             item {
                 RuleCard(
                     name = "DND for YT Music + Bluetooth",
@@ -175,17 +223,59 @@ fun RuleListScreen() {
                     onToggle = { rule3Enabled = it },
                     onExpandToggle = { rule3Expanded = !rule3Expanded },
                 ) {
-                    Text(
-                        "Triggers when YouTube Music is playing and a Bluetooth audio device is connected. No additional configuration needed.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 12.dp),
-                    )
+                    Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                        Text("Bluetooth device", style = MaterialTheme.typography.labelMedium)
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (btTargetAddress.isBlank()) "Any audio device"
+                                       else "${btTargetName.ifBlank { "Unknown" }} ($btTargetAddress)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = {
+                                    val hasPermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                                        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                                    if (hasPermission) showBtPicker = true
+                                    else btPermLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                                },
+                            ) { Text("Browse") }
+                            if (btTargetAddress.isNotBlank()) {
+                                TextButton(onClick = {
+                                    btTargetAddress = ""
+                                    btTargetName = ""
+                                    AppPreferences.setBluetoothTargetAddress(context, "")
+                                    AppPreferences.setBluetoothTargetName(context, "")
+                                }) { Text("Clear") }
+                            }
+                        }
+                        Text(
+                            if (btTargetAddress.isBlank()) "Triggers for any Bluetooth audio connection."
+                            else "Only triggers for the selected device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ActionCheckbox(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = 4.dp),
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -224,6 +314,8 @@ private fun RuleCard(
         }
     }
 }
+
+// ─── App Picker ──────────────────────────────────────────────────────────────
 
 private data class AppInfo(val name: String, val packageName: String)
 
@@ -271,12 +363,7 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 if (loading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 } else {
@@ -289,11 +376,92 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
                                     .padding(vertical = 10.dp, horizontal = 4.dp),
                             ) {
                                 Text(app.name, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    app.packageName,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Text(app.packageName, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// ─── Bluetooth Device Picker ──────────────────────────────────────────────────
+
+private data class BtDeviceInfo(val name: String, val address: String)
+
+@Composable
+private fun BluetoothDevicePickerDialog(onDismiss: () -> Unit, onSelect: (address: String, name: String) -> Unit) {
+    val context = LocalContext.current
+    var devices by remember { mutableStateOf<List<BtDeviceInfo>>(emptyList()) }
+    var permissionDenied by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val manager = context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            try {
+                val bonded: Set<BluetoothDevice> = manager?.adapter?.bondedDevices ?: emptySet()
+                devices = bonded
+                    .map { BtDeviceInfo(it.name ?: "Unknown", it.address) }
+                    .sortedBy { it.name }
+            } catch (e: SecurityException) {
+                permissionDenied = true
+            }
+            loading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Bluetooth Device") },
+        text = {
+            when {
+                loading -> Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                permissionDenied -> Text(
+                    "Bluetooth Connect permission was denied. Grant it in Settings → Apps → Automation App → Permissions, then try again.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                else -> LazyColumn(modifier = Modifier.height(300.dp)) {
+                    // "Any device" option
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect("", ""); onDismiss() }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                        ) {
+                            Text("Any audio device", style = MaterialTheme.typography.bodyMedium)
+                            Text("Trigger for all Bluetooth connections", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        HorizontalDivider()
+                    }
+                    if (devices.isEmpty()) {
+                        item {
+                            Text(
+                                "No paired Bluetooth devices found.",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                            )
+                        }
+                    } else {
+                        items(devices, key = { it.address }) { device ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelect(device.address, device.name); onDismiss() }
+                                    .padding(vertical = 10.dp, horizontal = 4.dp),
+                            ) {
+                                Text(device.name, style = MaterialTheme.typography.bodyMedium)
+                                Text(device.address, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             HorizontalDivider()
                         }
