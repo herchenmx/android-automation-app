@@ -27,6 +27,8 @@ import androidx.core.content.ContextCompat
 import com.herchenmx.automationapp.service.AutomationForegroundService
 import com.herchenmx.automationapp.util.AppPreferences
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -34,8 +36,10 @@ import kotlin.math.roundToInt
 @Composable
 fun RuleListScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var serviceRunning by remember { mutableStateOf(false) }
+    var restarting by remember { mutableStateOf(false) }
 
     // Rule 1
     var rule1Enabled by remember { mutableStateOf(true) }
@@ -59,6 +63,33 @@ fun RuleListScreen() {
 
     val btPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showBtPicker = true
+    }
+
+    // Snapshot of config that was last applied when the service was (re)started.
+    val currentConfig = "$targetApp|$batteryThreshold|$batterySaverAutoSync|$batterySaverBrightness|$btTargetAddress"
+    var appliedConfig by remember { mutableStateOf(currentConfig) }
+    val configDirty = serviceRunning && currentConfig != appliedConfig
+
+    fun startService() {
+        context.startForegroundService(Intent(context, AutomationForegroundService::class.java))
+        serviceRunning = true
+        appliedConfig = currentConfig
+    }
+
+    fun stopService() {
+        context.stopService(Intent(context, AutomationForegroundService::class.java))
+        serviceRunning = false
+    }
+
+    fun restartService() {
+        restarting = true
+        scope.launch {
+            context.stopService(Intent(context, AutomationForegroundService::class.java))
+            delay(600L)
+            context.startForegroundService(Intent(context, AutomationForegroundService::class.java))
+            appliedConfig = currentConfig
+            restarting = false
+        }
     }
 
     if (showAppPicker) {
@@ -88,11 +119,19 @@ fun RuleListScreen() {
             TopAppBar(
                 title = { Text("Automation Rules") },
                 actions = {
-                    Text(
-                        text = if (serviceRunning) "● Running" else "○ Stopped",
-                        color = if (serviceRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(end = 16.dp),
-                    )
+                    val statusText = when {
+                        restarting    -> "↺ Restarting"
+                        configDirty   -> "● Restart needed"
+                        serviceRunning -> "● Running"
+                        else          -> "○ Stopped"
+                    }
+                    val statusColor = when {
+                        restarting     -> MaterialTheme.colorScheme.tertiary
+                        configDirty    -> MaterialTheme.colorScheme.error
+                        serviceRunning -> MaterialTheme.colorScheme.primary
+                        else           -> MaterialTheme.colorScheme.error
+                    }
+                    Text(statusText, color = statusColor, modifier = Modifier.padding(end = 16.dp))
                 },
             )
         }
@@ -103,18 +142,34 @@ fun RuleListScreen() {
             contentPadding = PaddingValues(vertical = 16.dp),
         ) {
             item {
-                Button(
-                    onClick = {
-                        if (!serviceRunning) {
-                            context.startForegroundService(Intent(context, AutomationForegroundService::class.java))
-                        } else {
-                            context.stopService(Intent(context, AutomationForegroundService::class.java))
+                if (!serviceRunning) {
+                    Button(
+                        onClick = { startService() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !restarting,
+                    ) {
+                        Text("Start Service")
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { stopService() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !restarting,
+                        ) {
+                            Text("Stop")
                         }
-                        serviceRunning = !serviceRunning
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (serviceRunning) "Stop Service" else "Start Service")
+                        Button(
+                            onClick = { restartService() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !restarting,
+                            colors = if (configDirty) ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            ) else ButtonDefaults.buttonColors(),
+                        ) {
+                            Text(if (restarting) "Restarting…" else if (configDirty) "↺ Apply Changes" else "↺ Restart")
+                        }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
             }
