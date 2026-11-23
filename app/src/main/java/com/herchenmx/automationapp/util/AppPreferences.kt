@@ -1,38 +1,74 @@
 package com.herchenmx.automationapp.util
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
+data class BtDevice(val address: String, val name: String)
 
 object AppPreferences {
     private const val PREFS_NAME = "automation_config"
 
-    // Rule 1: target app package
+    // ── Rule 1: target app ────────────────────────────────────────────────────
     fun getTargetApp(context: Context): String = prefs(context).getString("target_app_package", "") ?: ""
-    fun setTargetApp(context: Context, packageName: String) =
-        prefs(context).edit().putString("target_app_package", packageName).apply()
+    fun setTargetApp(context: Context, pkg: String) =
+        prefs(context).edit().putString("target_app_package", pkg).apply()
 
-    // Rule 2: battery threshold
+    // ── Rule 2: battery threshold ─────────────────────────────────────────────
     const val DEFAULT_BATTERY_THRESHOLD = 20
     fun getBatteryThreshold(context: Context): Int = prefs(context).getInt("battery_threshold", DEFAULT_BATTERY_THRESHOLD)
     fun setBatteryThreshold(context: Context, percent: Int) =
         prefs(context).edit().putInt("battery_threshold", percent).apply()
 
-    // Rule 2: which actions to take when battery drops
-    fun getBatterySaverAutoSync(context: Context): Boolean = prefs(context).getBoolean("battery_saver_auto_sync", true)
-    fun setBatterySaverAutoSync(context: Context, enabled: Boolean) =
-        prefs(context).edit().putBoolean("battery_saver_auto_sync", enabled).apply()
+    // ── Rule 2: which actions to take ─────────────────────────────────────────
 
-    fun getBatterySaverBrightness(context: Context): Boolean = prefs(context).getBoolean("battery_saver_brightness", true)
-    fun setBatterySaverBrightness(context: Context, enabled: Boolean) =
-        prefs(context).edit().putBoolean("battery_saver_brightness", enabled).apply()
+    // Disable auto-sync
+    fun getBatterySaverAutoSync(context: Context): Boolean = prefs(context).getBoolean("bs_auto_sync", true)
+    fun setBatterySaverAutoSync(context: Context, v: Boolean) = prefs(context).edit().putBoolean("bs_auto_sync", v).apply()
 
-    // Rule 3: target Bluetooth device (empty = any device)
-    fun getBluetoothTargetAddress(context: Context): String = prefs(context).getString("bt_target_address", "") ?: ""
-    fun setBluetoothTargetAddress(context: Context, address: String) =
-        prefs(context).edit().putString("bt_target_address", address).apply()
+    // Set brightness mode to manual
+    fun getBatterySaverBrightnessMode(context: Context): Boolean = prefs(context).getBoolean("bs_brightness_mode", true)
+    fun setBatterySaverBrightnessMode(context: Context, v: Boolean) = prefs(context).edit().putBoolean("bs_brightness_mode", v).apply()
 
-    fun getBluetoothTargetName(context: Context): String = prefs(context).getString("bt_target_name", "") ?: ""
-    fun setBluetoothTargetName(context: Context, name: String) =
-        prefs(context).edit().putString("bt_target_name", name).apply()
+    // Set brightness level (5–50 %)
+    fun getBatterySaverBrightnessLevel(context: Context): Boolean = prefs(context).getBoolean("bs_brightness_level", false)
+    fun setBatterySaverBrightnessLevel(context: Context, v: Boolean) = prefs(context).edit().putBoolean("bs_brightness_level", v).apply()
+    fun getBatterySaverBrightnessLevelPct(context: Context): Int = prefs(context).getInt("bs_brightness_pct", 20)
+    fun setBatterySaverBrightnessLevelPct(context: Context, pct: Int) = prefs(context).edit().putInt("bs_brightness_pct", pct).apply()
+
+    // Shorten screen timeout (seconds: 30 / 60 / 120 / 300)
+    fun getBatterySaverTimeout(context: Context): Boolean = prefs(context).getBoolean("bs_timeout", false)
+    fun setBatterySaverTimeout(context: Context, v: Boolean) = prefs(context).edit().putBoolean("bs_timeout", v).apply()
+    fun getBatterySaverTimeoutSecs(context: Context): Int = prefs(context).getInt("bs_timeout_secs", 60)
+    fun setBatterySaverTimeoutSecs(context: Context, secs: Int) = prefs(context).edit().putInt("bs_timeout_secs", secs).apply()
+
+    // Enable Do Not Disturb
+    fun getBatterySaverDnd(context: Context): Boolean = prefs(context).getBoolean("bs_dnd", false)
+    fun setBatterySaverDnd(context: Context, v: Boolean) = prefs(context).edit().putBoolean("bs_dnd", v).apply()
+
+    // Lower media volume (0–50 %)
+    fun getBatterySaverMediaVolume(context: Context): Boolean = prefs(context).getBoolean("bs_media_vol", false)
+    fun setBatterySaverMediaVolume(context: Context, v: Boolean) = prefs(context).edit().putBoolean("bs_media_vol", v).apply()
+    fun getBatterySaverMediaVolumePct(context: Context): Int = prefs(context).getInt("bs_media_vol_pct", 20)
+    fun setBatterySaverMediaVolumePct(context: Context, pct: Int) = prefs(context).edit().putInt("bs_media_vol_pct", pct).apply()
+
+    // ── Rule 3: Bluetooth target devices (empty list = any device) ────────────
+    fun getBluetoothTargetDevices(context: Context): List<BtDevice> {
+        val json = prefs(context).getString("bt_target_devices", "[]") ?: "[]"
+        return try {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map {
+                val obj = arr.getJSONObject(it)
+                BtDevice(obj.getString("address"), obj.getString("name"))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun setBluetoothTargetDevices(context: Context, devices: List<BtDevice>) {
+        val arr = JSONArray()
+        devices.forEach { arr.put(JSONObject().put("address", it.address).put("name", it.name)) }
+        prefs(context).edit().putString("bt_target_devices", arr.toString()).apply()
+    }
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

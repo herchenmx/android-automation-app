@@ -1,6 +1,5 @@
 package com.herchenmx.automationapp.triggers
 
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -15,12 +14,12 @@ import timber.log.Timber
 /**
  * Fires when a Bluetooth audio device connects or disconnects.
  *
- * @param targetDeviceAddress MAC address of the specific device to watch, or empty for any device.
+ * @param targetDeviceAddresses MAC addresses to watch. Empty set = any device.
  */
 class BluetoothAudioTrigger(
     override val id: String,
     private val context: Context,
-    private val targetDeviceAddress: String = "",
+    private val targetDeviceAddresses: Set<String> = emptySet(),
 ) : Trigger {
 
     private var callback: ((Boolean) -> Unit)? = null
@@ -29,11 +28,10 @@ class BluetoothAudioTrigger(
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             val state = intent.getIntExtra(
-                BluetoothAdapter.EXTRA_CONNECTION_STATE,
-                BluetoothAdapter.STATE_DISCONNECTED,
+                android.bluetooth.BluetoothAdapter.EXTRA_CONNECTION_STATE,
+                android.bluetooth.BluetoothAdapter.STATE_DISCONNECTED,
             )
-            // If a specific device is configured, ignore events from other devices.
-            if (targetDeviceAddress.isNotBlank()) {
+            if (targetDeviceAddresses.isNotEmpty()) {
                 val device: BluetoothDevice? = try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
@@ -42,12 +40,13 @@ class BluetoothAudioTrigger(
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
                 } catch (_: Exception) { null }
-                if (device?.address != targetDeviceAddress) return
+                if (device?.address !in targetDeviceAddresses) return
             }
-            val isConnected = state == BluetoothAdapter.STATE_CONNECTED
+            val isConnected = state == android.bluetooth.BluetoothAdapter.STATE_CONNECTED
             if (isConnected != currentlyActive) {
                 currentlyActive = isConnected
-                Timber.d("BluetoothAudioTrigger[$id]: connected=$isConnected device=${targetDeviceAddress.ifBlank { "any" }}")
+                val target = if (targetDeviceAddresses.isEmpty()) "any" else targetDeviceAddresses.joinToString()
+                Timber.d("BluetoothAudioTrigger[$id]: connected=$isConnected target=$target")
                 callback?.invoke(isConnected)
             }
         }
@@ -55,23 +54,25 @@ class BluetoothAudioTrigger(
 
     override fun start(onStateChange: (Boolean) -> Unit) {
         callback = onStateChange
-        context.registerReceiver(receiver, IntentFilter(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED))
-
-        // Check initial state. getConnectedDevices(A2DP) requires BLUETOOTH_CONNECT on API 31+.
+        context.registerReceiver(
+            receiver,
+            IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED),
+        )
         val initiallyConnected = try {
             val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val connected = manager?.getConnectedDevices(BluetoothProfile.A2DP) ?: emptyList()
-            if (targetDeviceAddress.isBlank()) {
+            if (targetDeviceAddresses.isEmpty()) {
                 connected.isNotEmpty()
             } else {
-                connected.any { it.address == targetDeviceAddress }
+                connected.any { it.address in targetDeviceAddresses }
             }
         } catch (e: SecurityException) {
             Timber.w("BluetoothAudioTrigger[$id]: BLUETOOTH_CONNECT not granted, assuming disconnected")
             false
         }
         currentlyActive = initiallyConnected
-        Timber.d("BluetoothAudioTrigger[$id]: started, initial=$initiallyConnected target=${targetDeviceAddress.ifBlank { "any" }}")
+        val target = if (targetDeviceAddresses.isEmpty()) "any" else targetDeviceAddresses.joinToString()
+        Timber.d("BluetoothAudioTrigger[$id]: started initial=$initiallyConnected target=$target")
         if (initiallyConnected) onStateChange(true)
     }
 
