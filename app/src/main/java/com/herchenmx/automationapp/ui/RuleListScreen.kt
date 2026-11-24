@@ -68,6 +68,8 @@ fun RuleListScreen() {
     var rule3Expanded by remember { mutableStateOf(false) }
     var btDevices by remember { mutableStateOf(AppPreferences.getBluetoothTargetDevices(context)) }
     var showBtPicker by remember { mutableStateOf(false) }
+    var dndApps by remember { mutableStateOf(AppPreferences.getDndTargetApps(context)) }
+    var showDndAppPicker by remember { mutableStateOf(false) }
 
     val btPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showBtPicker = true
@@ -78,6 +80,7 @@ fun RuleListScreen() {
         targetApp, batteryThreshold, bsAutoSync, bsBrightnessMode, bsBrightnessLevel,
         bsBrightnessLevelPct, bsTimeout, bsTimeoutSecs, bsDnd, bsMediaVolume, bsMediaVolumePct,
         btDevices.joinToString { it.address },
+        dndApps.joinToString(),
     ).joinToString("|")
     var appliedConfig by remember { mutableStateOf(currentConfig) }
     val configDirty = serviceRunning && currentConfig != appliedConfig
@@ -114,6 +117,16 @@ fun RuleListScreen() {
             onApply = { selected ->
                 btDevices = selected
                 AppPreferences.setBluetoothTargetDevices(context, selected)
+            },
+        )
+    }
+    if (showDndAppPicker) {
+        AppMultiPickerDialog(
+            currentPackages = dndApps,
+            onDismiss = { showDndAppPicker = false },
+            onApply = { selected ->
+                dndApps = selected
+                AppPreferences.setDndTargetApps(context, selected)
             },
         )
     }
@@ -285,13 +298,35 @@ fun RuleListScreen() {
             // ── Rule 3 ────────────────────────────────────────────────────────
             item {
                 RuleCard(
-                    name = "DND for YT Music + Bluetooth",
-                    description = "Enables DND when YT Music plays over Bluetooth audio.",
+                    name = "DND on Media + Bluetooth",
+                    description = "Enables DND when selected apps play over Bluetooth audio.",
                     isEnabled = rule3Enabled, isExpanded = rule3Expanded,
                     onToggle = { rule3Enabled = it },
                     onExpandToggle = { rule3Expanded = !rule3Expanded },
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                        // Media apps
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Media apps", style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.weight(1f))
+                            TextButton(onClick = { showDndAppPicker = true }) { Text("Edit") }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        if (dndApps.isEmpty()) {
+                            Text("No apps selected — rule will not trigger.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error)
+                        } else {
+                            dndApps.forEach { pkg ->
+                                Text("• $pkg", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(10.dp))
+
+                        // Bluetooth devices
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Bluetooth devices", style = MaterialTheme.typography.labelMedium,
                                 modifier = Modifier.weight(1f))
@@ -302,7 +337,7 @@ fun RuleListScreen() {
                                 else btPermLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
                             }) { Text("Edit") }
                         }
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(2.dp))
                         if (btDevices.isEmpty()) {
                             Text("Any audio device — triggers for all Bluetooth connections.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -459,6 +494,89 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
             }
         },
         confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+// ── App Multi-Select Picker ───────────────────────────────────────────────────
+
+@Composable
+private fun AppMultiPickerDialog(
+    currentPackages: List<String>,
+    onDismiss: () -> Unit,
+    onApply: (List<String>) -> Unit,
+) {
+    val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+    var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var selectedPackages by remember { mutableStateOf(currentPackages.toMutableSet()) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val pm = context.packageManager
+            @Suppress("DEPRECATION")
+            val resolved: List<ResolveInfo> = pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }, 0
+            )
+            apps = resolved.distinctBy { it.activityInfo.packageName }
+                .map { AppInfo(it.loadLabel(pm).toString(), it.activityInfo.packageName) }
+                .sortedBy { it.name }
+            loading = false
+        }
+    }
+    val filtered = remember(query, apps) {
+        if (query.isBlank()) apps
+        else apps.filter { it.name.contains(query, true) || it.packageName.contains(query, true) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Media Apps") },
+        text = {
+            Column {
+                OutlinedTextField(value = query, onValueChange = { query = it },
+                    placeholder = { Text("Search…") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                } else {
+                    LazyColumn(Modifier.height(320.dp)) {
+                        items(filtered, key = { it.packageName }) { app ->
+                            val checked = app.packageName in selectedPackages
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clickable {
+                                        selectedPackages = selectedPackages.toMutableSet().apply {
+                                            if (checked) remove(app.packageName) else add(app.packageName)
+                                        }
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = {
+                                        selectedPackages = selectedPackages.toMutableSet().apply {
+                                            if (it) add(app.packageName) else remove(app.packageName)
+                                        }
+                                    },
+                                )
+                                Column {
+                                    Text(app.name, style = MaterialTheme.typography.bodyMedium)
+                                    Text(app.packageName, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(selectedPackages.toList()); onDismiss() }) { Text("Apply") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

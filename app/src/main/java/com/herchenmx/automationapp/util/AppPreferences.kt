@@ -52,6 +52,24 @@ object AppPreferences {
     fun getBatterySaverMediaVolumePct(context: Context): Int = prefs(context).getInt("bs_media_vol_pct", 20)
     fun setBatterySaverMediaVolumePct(context: Context, pct: Int) = prefs(context).edit().putInt("bs_media_vol_pct", pct).apply()
 
+    // ── Rule 3: media apps that trigger DND (default = YT Music) ─────────────
+    private val DEFAULT_DND_APPS = listOf("com.google.android.apps.youtube.music")
+
+    fun getDndTargetApps(context: Context): List<String> {
+        val json = prefs(context).getString("dnd_target_apps", null)
+            ?: return DEFAULT_DND_APPS
+        return try {
+            val arr = JSONArray(json)
+            (0 until arr.length()).map { arr.getString(it) }
+        } catch (_: Exception) { DEFAULT_DND_APPS }
+    }
+
+    fun setDndTargetApps(context: Context, packages: List<String>) {
+        val arr = JSONArray()
+        packages.forEach { arr.put(it) }
+        prefs(context).edit().putString("dnd_target_apps", arr.toString()).apply()
+    }
+
     // ── Rule 3: Bluetooth target devices (empty list = any device) ────────────
     fun getBluetoothTargetDevices(context: Context): List<BtDevice> {
         val json = prefs(context).getString("bt_target_devices", "[]") ?: "[]"

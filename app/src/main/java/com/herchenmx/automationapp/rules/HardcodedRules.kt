@@ -24,6 +24,7 @@ object HardcodedRules {
         val targetApp = AppPreferences.getTargetApp(context)
         val batteryThreshold = AppPreferences.getBatteryThreshold(context)
         val btAddresses = AppPreferences.getBluetoothTargetDevices(context).map { it.address }.toSet()
+        val dndApps = AppPreferences.getDndTargetApps(context).toSet()
 
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -96,7 +97,7 @@ object HardcodedRules {
                 id = "yt_music_bt_dnd",
                 name = "DND while YT Music on Bluetooth",
                 triggers = listOf(
-                    MediaSessionActiveTrigger(id = "yt_music"),
+                    MediaSessionActiveTrigger(id = "yt_music", targetPackages = dndApps),
                     BluetoothAudioTrigger(
                         id = "bt_audio", context = context, targetDeviceAddresses = btAddresses,
                     ),
