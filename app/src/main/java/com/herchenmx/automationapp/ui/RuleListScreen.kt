@@ -181,8 +181,8 @@ fun RuleListScreen() {
             // ── Rule 1 ────────────────────────────────────────────────────────
             item {
                 RuleCard(
-                    name = "Pause App Audio on Foreground",
-                    description = "Pauses the target app's audio when it comes to foreground. Background music is unaffected.",
+                    name = "Suppress App Audio on Foreground",
+                    description = "Silences the target app's video/reel audio while it's in the foreground. Background music is unaffected.",
                     isEnabled = rule1Enabled, isExpanded = rule1Expanded,
                     onToggle = { rule1Enabled = it },
                     onExpandToggle = { rule1Expanded = !rule1Expanded },

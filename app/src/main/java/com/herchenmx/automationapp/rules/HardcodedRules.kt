@@ -5,7 +5,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.provider.Settings
 import com.herchenmx.automationapp.actions.DndModeAction
-import com.herchenmx.automationapp.actions.PauseMediaSessionAction
+import com.herchenmx.automationapp.actions.SuppressMediaSessionAction
 import com.herchenmx.automationapp.actions.SetSystemSettingAction
 import com.herchenmx.automationapp.actions.SetVolumeAction
 import com.herchenmx.automationapp.actions.SystemFeature
@@ -80,7 +80,7 @@ object HardcodedRules {
                 name = "Pause app audio on foreground",
                 triggers = listOf(ForegroundAppTrigger(id = "fg_app", targetPackage = targetApp)),
                 actions = listOf(
-                    PauseMediaSessionAction(id = "pause_fg_app", targetPackage = targetApp)
+                    SuppressMediaSessionAction(id = "suppress_fg_app", targetPackage = targetApp)
                 ),
             ),
             Rule(
