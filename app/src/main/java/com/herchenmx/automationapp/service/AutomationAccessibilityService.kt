@@ -19,18 +19,26 @@ class AutomationAccessibilityService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+        if (event.action == KeyEvent.ACTION_DOWN) {
             val active = SuppressMediaSessionAction.activePackages
             val paused = SuppressMediaSessionAction.suppressionPaused
-            // Only intercept if suppression is running and not already paused
-            val pkg = active.firstOrNull { !paused.contains(it) }
-            if (pkg != null) {
-                paused.add(pkg)
-                // Resume the app's audio immediately
-                AutomationNotificationListenerService.activeControllers[pkg]
-                    ?.transportControls?.play()
-                Timber.d("AccessibilityService: volume-up paused suppression for $pkg")
-                return false // still let the volume change go through
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> {
+                    val pkg = active.firstOrNull { !paused.contains(it) }
+                    if (pkg != null) {
+                        paused.add(pkg)
+                        AutomationNotificationListenerService.activeControllers[pkg]
+                            ?.transportControls?.play()
+                        Timber.d("AccessibilityService: volume-up paused suppression for $pkg")
+                    }
+                }
+                KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                    val pkg = active.firstOrNull { paused.contains(it) }
+                    if (pkg != null) {
+                        paused.remove(pkg)
+                        Timber.d("AccessibilityService: volume-down resumed suppression for $pkg")
+                    }
+                }
             }
         }
         return false
