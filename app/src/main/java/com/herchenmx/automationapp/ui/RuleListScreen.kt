@@ -25,6 +25,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.herchenmx.automationapp.service.AutomationForegroundService
+import com.herchenmx.automationapp.service.AutomationForegroundService.Companion.ACTION_TOGGLE_RULE
+import com.herchenmx.automationapp.service.AutomationForegroundService.Companion.EXTRA_RULE_ENABLED
+import com.herchenmx.automationapp.service.AutomationForegroundService.Companion.EXTRA_RULE_ID
 import com.herchenmx.automationapp.util.AppPreferences
 import com.herchenmx.automationapp.util.BtDevice
 import kotlinx.coroutines.Dispatchers
@@ -43,13 +46,13 @@ fun RuleListScreen() {
     var restarting by remember { mutableStateOf(false) }
 
     // ── Rule 1 ────────────────────────────────────────────────────────────────
-    var rule1Enabled by remember { mutableStateOf(true) }
+    var rule1Enabled by remember { mutableStateOf(AppPreferences.getRuleEnabled(context, "foreground_app_volume")) }
     var rule1Expanded by remember { mutableStateOf(false) }
     var targetApp by remember { mutableStateOf(AppPreferences.getTargetApp(context)) }
     var showAppPicker by remember { mutableStateOf(false) }
 
     // ── Rule 2 ────────────────────────────────────────────────────────────────
-    var rule2Enabled by remember { mutableStateOf(true) }
+    var rule2Enabled by remember { mutableStateOf(AppPreferences.getRuleEnabled(context, "battery_saver")) }
     var rule2Expanded by remember { mutableStateOf(false) }
     var batteryThreshold by remember { mutableFloatStateOf(AppPreferences.getBatteryThreshold(context).toFloat()) }
 
@@ -64,7 +67,7 @@ fun RuleListScreen() {
     var bsMediaVolumePct by remember { mutableFloatStateOf(AppPreferences.getBatterySaverMediaVolumePct(context).toFloat()) }
 
     // ── Rule 3 ────────────────────────────────────────────────────────────────
-    var rule3Enabled by remember { mutableStateOf(true) }
+    var rule3Enabled by remember { mutableStateOf(AppPreferences.getRuleEnabled(context, "yt_music_bt_dnd")) }
     var rule3Expanded by remember { mutableStateOf(false) }
     var btDevices by remember { mutableStateOf(AppPreferences.getBluetoothTargetDevices(context)) }
     var showBtPicker by remember { mutableStateOf(false) }
@@ -93,6 +96,17 @@ fun RuleListScreen() {
         context.stopService(Intent(context, AutomationForegroundService::class.java))
         serviceRunning = false
     }
+    fun toggleRule(ruleId: String, enabled: Boolean) {
+        AppPreferences.setRuleEnabled(context, ruleId, enabled)
+        if (serviceRunning) {
+            context.sendBroadcast(Intent(ACTION_TOGGLE_RULE).apply {
+                putExtra(EXTRA_RULE_ID, ruleId)
+                putExtra(EXTRA_RULE_ENABLED, enabled)
+                setPackage(context.packageName)
+            })
+        }
+    }
+
     fun restartService() {
         restarting = true
         scope.launch {
@@ -184,7 +198,7 @@ fun RuleListScreen() {
                     name = "Suppress App Audio on Foreground",
                     description = "Silences the target app's video/reel audio while it's in the foreground. Background music is unaffected.",
                     isEnabled = rule1Enabled, isExpanded = rule1Expanded,
-                    onToggle = { rule1Enabled = it },
+                    onToggle = { rule1Enabled = it; toggleRule("foreground_app_volume", it) },
                     onExpandToggle = { rule1Expanded = !rule1Expanded },
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
@@ -212,7 +226,7 @@ fun RuleListScreen() {
                     name = "Battery Saver",
                     description = "Applies selected actions when battery drops below threshold.",
                     isEnabled = rule2Enabled, isExpanded = rule2Expanded,
-                    onToggle = { rule2Enabled = it },
+                    onToggle = { rule2Enabled = it; toggleRule("battery_saver", it) },
                     onExpandToggle = { rule2Expanded = !rule2Expanded },
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
@@ -301,7 +315,7 @@ fun RuleListScreen() {
                     name = "DND on Media + Bluetooth",
                     description = "Enables DND when selected apps play over Bluetooth audio.",
                     isEnabled = rule3Enabled, isExpanded = rule3Expanded,
-                    onToggle = { rule3Enabled = it },
+                    onToggle = { rule3Enabled = it; toggleRule("yt_music_bt_dnd", it) },
                     onExpandToggle = { rule3Expanded = !rule3Expanded },
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)) {

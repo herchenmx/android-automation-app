@@ -78,6 +78,7 @@ object HardcodedRules {
             Rule(
                 id = "foreground_app_volume",
                 name = "Pause app audio on foreground",
+                isEnabled = AppPreferences.getRuleEnabled(context, "foreground_app_volume"),
                 triggers = listOf(ForegroundAppTrigger(id = "fg_app", targetPackage = targetApp)),
                 actions = listOf(
                     SuppressMediaSessionAction(id = "suppress_fg_app", targetPackage = targetApp)
@@ -86,6 +87,7 @@ object HardcodedRules {
             Rule(
                 id = "battery_saver",
                 name = "Battery saver at $batteryThreshold%",
+                isEnabled = AppPreferences.getRuleEnabled(context, "battery_saver"),
                 triggers = listOf(BatteryLevelTrigger(
                     id = "battery_trigger", context = context, thresholdPercent = batteryThreshold,
                 )),
@@ -94,6 +96,7 @@ object HardcodedRules {
             Rule(
                 id = "yt_music_bt_dnd",
                 name = "DND while YT Music on Bluetooth",
+                isEnabled = AppPreferences.getRuleEnabled(context, "yt_music_bt_dnd"),
                 triggers = listOf(
                     MediaSessionActiveTrigger(id = "yt_music", targetPackages = dndApps),
                     BluetoothAudioTrigger(

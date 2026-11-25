@@ -88,6 +88,12 @@ object AppPreferences {
         prefs(context).edit().putString("bt_target_devices", arr.toString()).apply()
     }
 
+    // ── Per-rule enabled flags ────────────────────────────────────────────────
+    fun getRuleEnabled(context: Context, ruleId: String): Boolean =
+        prefs(context).getBoolean("rule_enabled_$ruleId", true)
+    fun setRuleEnabled(context: Context, ruleId: String, enabled: Boolean) =
+        prefs(context).edit().putBoolean("rule_enabled_$ruleId", enabled).apply()
+
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 }

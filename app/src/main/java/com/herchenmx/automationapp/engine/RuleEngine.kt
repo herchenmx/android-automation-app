@@ -44,6 +44,30 @@ class RuleEngine(
         Timber.d("RuleEngine: all rules stopped")
     }
 
+    fun setRuleEnabled(ruleId: String, enabled: Boolean) {
+        val rule = rules.find { it.id == ruleId } ?: return
+        if (rule.isEnabled == enabled) return
+        rule.isEnabled = enabled
+        Timber.d("RuleEngine: rule '${rule.name}' enabled=$enabled")
+        if (!enabled) {
+            rule.triggers.forEach { it.stop() }
+            if (ruleActive[ruleId] == true) {
+                ruleActive[ruleId] = false
+                scope.launch(Dispatchers.IO) { rule.actions.forEach { it.revert() } }
+            }
+            triggerActiveCount[ruleId] = 0
+        } else {
+            triggerActiveCount[ruleId] = 0
+            rule.triggers.forEach { trigger ->
+                try {
+                    trigger.start { isActive -> onTriggerChanged(rule, trigger, isActive) }
+                } catch (e: Exception) {
+                    Timber.e(e, "RuleEngine: failed to start trigger '${trigger.id}'")
+                }
+            }
+        }
+    }
+
     private fun onTriggerChanged(rule: Rule, trigger: Trigger, isActive: Boolean) {
         if (!rule.isEnabled) return
         Timber.d("RuleEngine: trigger '${trigger.id}' -> $isActive for rule '${rule.name}'")
