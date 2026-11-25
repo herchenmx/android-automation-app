@@ -11,7 +11,6 @@ import timber.log.Timber
 
 class AutomationNotificationListenerService : NotificationListenerService() {
 
-    private val ytMusicPackage = "com.google.android.apps.youtube.music"
     private var mediaSessionManager: MediaSessionManager? = null
     private var sessionListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
     private val controllerCallbacks = mutableMapOf<MediaController, MediaController.Callback>()
@@ -25,6 +24,7 @@ class AutomationNotificationListenerService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         clearCallbacks()
+        currentlyPlaying.clear()
         Timber.d("NotificationListenerService: disconnected")
     }
 
@@ -34,14 +34,19 @@ class AutomationNotificationListenerService : NotificationListenerService() {
             mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as? MediaSessionManager
             sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
                 Timber.d("NotificationListenerService: sessions changed count=${controllers?.size}")
+                // Mark all previously tracked packages as stopped before re-scanning
+                currentlyPlaying.toSet().forEach { pkg ->
+                    MediaSessionActiveTrigger.notifyPlaybackChanged(pkg, false)
+                }
+                currentlyPlaying.clear()
                 clearCallbacks()
                 controllers?.forEach { attachCallback(it) }
-                checkYtMusicPlayback(controllers)
+                notifyAllPlaybackStates(controllers)
             }
             mediaSessionManager?.addOnActiveSessionsChangedListener(sessionListener!!, component)
             val initial = mediaSessionManager?.getActiveSessions(component)
             initial?.forEach { attachCallback(it) }
-            checkYtMusicPlayback(initial)
+            notifyAllPlaybackStates(initial)
         } catch (e: Exception) {
             Timber.e(e, "NotificationListenerService: failed to set up media monitoring")
         }
@@ -49,13 +54,13 @@ class AutomationNotificationListenerService : NotificationListenerService() {
 
     private fun attachCallback(controller: MediaController) {
         if (controllerCallbacks.containsKey(controller)) return
+        val pkg = controller.packageName
         val cb = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
-                if (controller.packageName == ytMusicPackage) {
-                    val isPlaying = state?.state == PlaybackState.STATE_PLAYING
-                    Timber.d("NotificationListenerService: YT Music isPlaying=$isPlaying")
-                    MediaSessionActiveTrigger.notifyPlaybackChanged(ytMusicPackage, isPlaying)
-                }
+                val isPlaying = state?.state == PlaybackState.STATE_PLAYING
+                Timber.d("NotificationListenerService: $pkg isPlaying=$isPlaying")
+                if (isPlaying) currentlyPlaying.add(pkg) else currentlyPlaying.remove(pkg)
+                MediaSessionActiveTrigger.notifyPlaybackChanged(pkg, isPlaying)
             }
         }
         controller.registerCallback(cb)
@@ -69,14 +74,20 @@ class AutomationNotificationListenerService : NotificationListenerService() {
         controllerCallbacks.clear()
     }
 
-    private fun checkYtMusicPlayback(controllers: List<MediaController>?) {
-        val isPlaying = controllers?.any { ctrl ->
-            ctrl.packageName == ytMusicPackage &&
-                ctrl.playbackState?.state == PlaybackState.STATE_PLAYING
-        } ?: false
-        MediaSessionActiveTrigger.notifyPlaybackChanged(ytMusicPackage, isPlaying)
+    private fun notifyAllPlaybackStates(controllers: List<MediaController>?) {
+        controllers?.forEach { ctrl ->
+            val isPlaying = ctrl.playbackState?.state == PlaybackState.STATE_PLAYING
+            Timber.d("NotificationListenerService: initial ${ctrl.packageName} isPlaying=$isPlaying")
+            if (isPlaying) currentlyPlaying.add(ctrl.packageName) else currentlyPlaying.remove(ctrl.packageName)
+            MediaSessionActiveTrigger.notifyPlaybackChanged(ctrl.packageName, isPlaying)
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {}
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {}
+
+    companion object {
+        // Packages currently known to be playing — used by triggers to check initial state
+        val currentlyPlaying: MutableSet<String> = mutableSetOf()
+    }
 }

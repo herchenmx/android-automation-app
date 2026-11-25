@@ -1,6 +1,7 @@
 package com.herchenmx.automationapp.triggers
 
 import com.herchenmx.automationapp.engine.Trigger
+import com.herchenmx.automationapp.service.AutomationNotificationListenerService
 import timber.log.Timber
 
 /**
@@ -20,6 +21,14 @@ class MediaSessionActiveTrigger(
         callback = onStateChange
         targetPackages.forEach { ActiveMediaListeners.register(it, this) }
         Timber.d("MediaSessionActiveTrigger[$id]: watching $targetPackages")
+        // Fire initial state from whatever the notification listener already knows
+        val alreadyPlaying = AutomationNotificationListenerService.currentlyPlaying
+            .intersect(targetPackages)
+        if (alreadyPlaying.isNotEmpty()) {
+            alreadyPlaying.forEach { playingPackages.add(it) }
+            Timber.d("MediaSessionActiveTrigger[$id]: initial active packages=$alreadyPlaying")
+            onStateChange(true)
+        }
     }
 
     override fun stop() {
