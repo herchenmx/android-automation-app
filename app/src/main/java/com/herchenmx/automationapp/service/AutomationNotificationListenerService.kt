@@ -55,12 +55,16 @@ class AutomationNotificationListenerService : NotificationListenerService() {
     private fun attachCallback(controller: MediaController) {
         if (controllerCallbacks.containsKey(controller)) return
         val pkg = controller.packageName
+        activeControllers[pkg] = controller
         val cb = object : MediaController.Callback() {
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 val isPlaying = state?.state == PlaybackState.STATE_PLAYING
                 Timber.d("NotificationListenerService: $pkg isPlaying=$isPlaying")
                 if (isPlaying) currentlyPlaying.add(pkg) else currentlyPlaying.remove(pkg)
                 MediaSessionActiveTrigger.notifyPlaybackChanged(pkg, isPlaying)
+            }
+            override fun onSessionDestroyed() {
+                activeControllers.remove(pkg)
             }
         }
         controller.registerCallback(cb)
@@ -72,6 +76,7 @@ class AutomationNotificationListenerService : NotificationListenerService() {
             try { ctrl.unregisterCallback(cb) } catch (_: Exception) {}
         }
         controllerCallbacks.clear()
+        activeControllers.clear()
     }
 
     private fun notifyAllPlaybackStates(controllers: List<MediaController>?) {
@@ -89,5 +94,7 @@ class AutomationNotificationListenerService : NotificationListenerService() {
     companion object {
         // Packages currently known to be playing — used by triggers to check initial state
         val currentlyPlaying: MutableSet<String> = mutableSetOf()
+        // Live MediaController per package — used by PauseMediaSessionAction
+        val activeControllers: MutableMap<String, MediaController> = mutableMapOf()
     }
 }

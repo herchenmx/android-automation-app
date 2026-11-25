@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.provider.Settings
 import com.herchenmx.automationapp.actions.DndModeAction
+import com.herchenmx.automationapp.actions.PauseMediaSessionAction
 import com.herchenmx.automationapp.actions.SetSystemSettingAction
 import com.herchenmx.automationapp.actions.SetVolumeAction
 import com.herchenmx.automationapp.actions.SystemFeature
@@ -76,13 +77,10 @@ object HardcodedRules {
         return listOf(
             Rule(
                 id = "foreground_app_volume",
-                name = "Mute app audio on foreground",
+                name = "Pause app audio on foreground",
                 triggers = listOf(ForegroundAppTrigger(id = "fg_app", targetPackage = targetApp)),
                 actions = listOf(
-                    SetVolumeAction(
-                        id = "mute_music", context = context, stateManager = stateManager,
-                        streamType = AudioManager.STREAM_MUSIC, targetVolume = 0,
-                    )
+                    PauseMediaSessionAction(id = "pause_fg_app", targetPackage = targetApp)
                 ),
             ),
             Rule(
