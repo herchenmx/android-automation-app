@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.herchenmx.automationapp.service.AutomationForegroundService
 import com.herchenmx.automationapp.service.AutomationForegroundService.Companion.ACTION_TOGGLE_RULE
+import com.herchenmx.automationapp.service.AutomationNotificationListenerService
 import com.herchenmx.automationapp.service.AutomationForegroundService.Companion.EXTRA_RULE_ENABLED
 import com.herchenmx.automationapp.service.AutomationForegroundService.Companion.EXTRA_RULE_ID
 import com.herchenmx.automationapp.util.AppPreferences
@@ -76,6 +77,18 @@ fun RuleListScreen() {
 
     val btPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showBtPicker = true
+    }
+
+    // ── Debug panel ──────────────────────────────────────────────────────────
+    var debugExpanded by remember { mutableStateOf(false) }
+    var debugSessions by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            debugSessions = AutomationNotificationListenerService.activeControllers
+                .mapValues { (pkg, _) -> AutomationNotificationListenerService.currentlyPlaying.contains(pkg) }
+            delay(1000L)
+        }
     }
 
     // ── Config-change tracking ────────────────────────────────────────────────
@@ -304,6 +317,57 @@ fun RuleListScreen() {
                             Spacer(Modifier.height(4.dp))
                             Text("No actions selected — rule will trigger but do nothing.",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+
+            // ── Debug panel ───────────────────────────────────────────────────
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { debugExpanded = !debugExpanded }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "MediaSession Debug",
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = if (debugExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                            )
+                        }
+                        if (debugExpanded) {
+                            HorizontalDivider()
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                if (debugSessions.isEmpty()) {
+                                    Text(
+                                        "No active MediaSessions detected.\nStart the service and open an app that plays audio.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    Text(
+                                        "Detected MediaSession packages:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    debugSessions.forEach { (pkg, playing) ->
+                                        Text(
+                                            "${if (playing) "▶" else "■"} $pkg",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (playing) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
